@@ -84,6 +84,20 @@ payload = padding + ebp + eip
 print(payload)
 
 **** Stack 5 ****
+Verkar som att man alltid vill skriva över "saved $eip" i buffer overflows.
+Kolla dessa vid varje segfault för att se vilken instruktion som failade, samt vilken instruktion som failade
+för ibland skrivs inte $eip över om "ret" redan ser att adressen är för stor eller ngt, så man får inte se 
+att "ret" försökte hoppa till adress (ex: Couldn't jump to adress: 0x41414141)
+x/i $eip (Print instruktionen vi är på)
+x/5wx $esp
+x/s $esp (Bra att kolla efter segfault för att se vilken del av input sträng som skriver över)
+
+Så att placera shellcode på stack kan vara farligt, speciellt om den hamnar nära eip. Det kan göra
+att instruktionerna i shellcode börjar skriva över sig själva med push/pop. Antingen placera shellcode efter 
+eip med en nopslide "padding" innan, eller nopslide + shellcode + padding + epi. Alltså payload bör vara:
+payload = padding + EIP + nopslide ("\x90"*64) + shellcode
+där EIP = start_addr (Adress där buffer börjar på stack) + len(padding) + sizeof(EIP)(troligen 4 bytes) + 10(ett bar bytes för att garantera att vi hamnar i nopslide) 
+
 #/bin/python 
 padding = "A" * (64 + 4*2) //payload här sen peka eip på detta? Vi kan ju kolla vilken adress det kommer hamna på
 ebp = "AAAA"
