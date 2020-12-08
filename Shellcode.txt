@@ -55,4 +55,36 @@ Disassembly of section .text:
  ------------------------------------------------------------------------
  Skriv om utan NULL-bytes:
  ------------------------------------------------------------------------
- TODO.
+.global	_start
+
+.text
+_start:
+	xor   %eax, %eax
+	mov   $4, %al 	 # <--- Dessa två eliminerar null-bytes, men gör samma som: mov eax,0x4
+
+	xor   %ebx, %ebx
+	mov   $1, %bl 	 # <--- Dessa två eliminerar null-bytes, men gör samma som: mov eax,0x1
+
+	movl  $msg, %ecx # address of msg string -> ECX (2nd argument)
+
+	xor %edx, %edx
+	mov $0xe, %dl 	# <--- Längd av sträng
+
+	int   $0x80      # interrupt with location 0x80 (128), which invokes the kernel's system call procedure
+
+	# ALLT UNDER HÄR KAN TAS BORT NÄR MAN KÖR BUFFER OVERFLOW, BARA HÄR NU FÖR ATT TESTA SCRIPTET
+	xor %eax, %eax
+	mov $1, %al 
+
+	xor %ebx, %ebx
+
+	int   $0x80      # see previous
+.data
+msg:
+	.ascii  "Hello, world!\n" # inline ascii string
+	len =   . - msg           # assign value of (current address - address of msg start) to symbol "len"
+------------------------------------------------------------------------
+Gör så att strängen man vill skriva ut skickas med i payload?
+------------------------------------------------------------------------
+TODO: Lägg strängen efter shellcode i payload? Sen peka ecx på den adressen (uträknad från saved eip) och
+	  skrivs direkt i opcode. 

