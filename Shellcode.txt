@@ -70,7 +70,7 @@ _start:
 	xor %edx, %edx
 	mov $0xe, %dl 	# <--- Längd av sträng
 
-	int   $0x80      # interrupt with location 0x80 (128), which invokes the kernel's system call procedure
+	int $0x80      # interrupt with location 0x80 (128), which invokes the kernel's system call procedure
 
 	# ALLT UNDER HÄR KAN TAS BORT NÄR MAN KÖR BUFFER OVERFLOW, BARA HÄR NU FÖR ATT TESTA SCRIPTET
 	xor %eax, %eax
@@ -88,3 +88,98 @@ Gör så att strängen man vill skriva ut skickas med i payload?
 ------------------------------------------------------------------------
 TODO: Lägg strängen efter shellcode i payload? Sen peka ecx på den adressen (uträknad från saved eip) och
 	  skrivs direkt i opcode. 
+------------------------------------------------------------------------
+------------------------------------------------------------------------
+------------------------------------------------------------------------
+I vissa fall kan man behöva stänga av ASLR för att shellkoden ska fungera: 
+echo 0 > /proc/sys/kernel/randomize_va_space 
+
+Kompilera testprogram med:
+gcc tester.c -o tester -fno-stack-protector -z execstack -no-pie (-std=c++11 om man vill kunna testa med gets()) (-m32/-m64 för 32/64 bitar)
+
+Kompilera/länka shellkod skriven i asm: 
+Basic shellcode: (GAS, GNU Assembler, using the AT&T Syntax) (vill man köra intel syntax får man tanka NASM compiler)
+gcc -c shellcode.s -m32/-m64        					<--- Compile (## as shellcode.s -o shellcode.o /nasm är ett annat alternativ)
+ld shellcode.o -o shellcode (-m elf_i386 om 32bit)      <--- Link (Om elf_i386 ej funger kolla arkitekturer med: ld -V)
+
+Extrahera shellkoden från binär fil:
+for i in `objdump -d hello | tr '\t' ' ' | tr ' ' '\n' | egrep '^[0-9a-f]{2}$' ` ; do echo -n "\\x$i" ; done ; echo -e "\n"
+
+------------------------------------------------------------------------
+Ny kod som tar med sträng i ett litet return trix: (DETTA ÄR ENDAST 32-BIT IOM ATT POP ANNARS FÖRSÖKER STOPPA IN EN 64-bit ADRESS I ETT 32-bit REGISTER!)
+Skriven för GAS (AT&T syntax) kompilatorn, fungerar ej med NASM (Intel syntax)
+------------------------------------------------------------------------
+.global _start
+.text
+
+_start:
+    jmp MESSAGE      # 1) lets jump to MESSAGE
+
+GOBACK:
+    movl $0x4, %eax
+    movl $0x1, %ebx
+    pop %ecx          # 3) we are poping into `ecx`, now we have the
+                      # address of "Hello, World!\r\n" 
+    movl $0xF, %edx
+    int $0x80
+
+    movl $0x1, %eax
+    movl $0x0, %ebx
+    int $0x80
+
+MESSAGE:
+    call GOBACK       # 2) we are going back, since we used `call`, that means
+                      # the return address, which is in this case the address 
+                      # of "Hello, World!\r\n", is pushed into the stack.
+    .string "Hello, World!\n"
+
+.data
+------------------------------------------------------------------------
+Skriv om utan null-bytes:
+------------------------------------------------------------------------
+.global _start
+.text
+
+_start:
+    jmp MESSAGE      # 1) lets jump to MESSAGE
+
+GOBACK:
+	xor   %eax, %eax
+	mov   $4, %al
+
+
+	xor   %ebx, %ebx
+	mov   $1, %bl
+
+    pop %ecx          # 3) we are poping into `ecx`, now we have the
+                      # address of "Hello, World!\r\n"
+
+	xor %edx, %edx
+	mov $0xF, %dl
+
+    int $0x80
+
+	xor %eax, %eax
+	mov $1, %al
+
+	xor %ebx, %ebx
+
+    int $0x80
+
+MESSAGE:
+    call GOBACK       # 2) we are going back, since we used `call`, that means
+                      # the return address, which is in this case the address
+                      # of "Hello, World!\r\n", is pushed into the stack.
+    .string "Hello, World!\n"
+
+.data
+------------------------------------------------------------------------
+Ovan genererar följande op-kod:
+------------------------------------------------------------------------
+\xeb\x17\x31\xc0\xb0\x04\x31\xdb\xb3\x01\x59\x31\xd2\xb2\x0f\xcd\x80\x31
+\xc0\xb0\x01\x31\xdb\xcd\x80\xe8\xe4\xff\xff\xff\x48\x65\x6c\x6c\x6f\x2c
+\x20\x57\x6f\x72\x6c\x64\x21\x0a
+------------------------------------------------------------------------
+Lägg till en nop-slide och skicka med en buffer overflow :D
+------------------------------------------------------------------------
+TODO: 
